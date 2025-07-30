@@ -34,8 +34,7 @@ def ok_solve(sim_xy, nearest, vario, precompute=False):
     rho[n] = 1 
 
     # solve for kriging weights
-    # k_weights = np.linalg.inv(Sigma)@rho
-    k_weights, res, rank, s = np.linalg.lstsq(Sigma, rho, rcond = None) 
+    k_weights = np.linalg.inv(Sigma)@rho
     var = vario['sill'] - np.sum(k_weights[0:n]*rho[0:n])
 
     if precompute == True:
