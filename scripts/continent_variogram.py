@@ -204,6 +204,12 @@ if __name__ == '__main__':
         }
     )
     df = df.dropna()
+
+    smooth_max = 1.5
+
+    # limit smoothness to range
+    df.loc[df.smooth < 0.5, 'smooth'] = 0.5
+    df.loc[df.smooth > smooth_max, 'smooth'] = smooth_max
     
     df.to_csv(Path('../continent_variogram_params.csv'), index=False)
 
@@ -225,8 +231,8 @@ if __name__ == '__main__':
     interp_sills = spline_interp_msk(points, df.sill.values, xx, yy, ice_rock_msk, damping)
     
     interp_smooths = spline_interp_msk(points, df.smooth.values, xx, yy, ice_rock_msk, damping)
-    interp_smooths = np.where(interp_smooths < 1.5, 1.5, interp_smooths)
-    interp_smooths = np.where(interp_smooths > 20, 20, interp_smooths)
+    interp_smooths = np.where(interp_smooths < 0.5, 0.5, interp_smooths)
+    interp_smooths = np.where(interp_smooths > smooth_max, smooth_max, interp_smooths)
 
     interp_major_ranges = spline_interp_msk(points, df.major_range.values, xx, yy, ice_rock_msk, damping)
     interp_major_ranges = np.where(interp_major_ranges < 0, np.mean(interp_major_ranges), interp_major_ranges)
