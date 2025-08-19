@@ -31,13 +31,13 @@ import gstatsim_custom as gsim
 
 if __name__=='__main__':
 
-    ds = xr.open_dataset(Path('../../bedmap/bedmap3_mod_1km.nc'))
+    ds = xr.open_dataset(Path('../../bedmap/bedmap3_mod_500m.nc'))
 
     # add exposed bedrock to conditioning data
-    thick_cond = np.where(ds.mask == 4, 0, ds.thick_cond.values)
+    thick_cond = np.where(ds.mask.values == 4, 0, ds.thick_cond.values)
     
     bed_cond = ds.surface_topography.values - thick_cond
-    ice_rock_msk = (ds.mask == 1) | (ds.mask == 4) | (ds.mask == 2)
+    ice_rock_msk = (ds.mask.values == 1) | (ds.mask.values == 4) | (ds.mask.values == 2)
     bed_cond = np.where(ice_rock_msk, bed_cond, np.nan)
     xx, yy = np.meshgrid(ds.x, ds.y)
     
@@ -52,7 +52,7 @@ if __name__=='__main__':
 
     res_norm, nst_trans = gsim.utilities.gaussian_transformation(res_cond, cond_msk)
 
-    dsv = xr.load_dataset(Path('../continental_variogram.nc'))
+    dsv = xr.load_dataset(Path('../continental_variogram_500.nc'))
     
     vario = {
         'azimuth' : dsv.azimuth.values,
@@ -82,7 +82,7 @@ if __name__=='__main__':
     toc = time.time()
     print(f'{toc-tic} seconds')
 
-    np.save(Path('../results/nonstationary_sim.npy'), sim)
+    np.save(Path('../results/nonstationary_sim_500m.npy'), sim)
 
     ilow = 1000
     ihigh = 5800
@@ -101,5 +101,5 @@ if __name__=='__main__':
     plt.ylabel('Y [km]')
     plt.title('SGS simulation+trend, exponential covariance')
     plt.colorbar(im, pad=0.03, aspect=40, shrink=0.7, label='bed elevation [meters]')
-    plt.savefig(Path('../figures/full_simulation_nonstationary.png'), dpi=300, bbox_inches='tight')
+    plt.savefig(Path('../figures/full_simulation_nonstationary_500m.png'), dpi=300, bbox_inches='tight')
     plt.show()

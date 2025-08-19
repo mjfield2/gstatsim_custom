@@ -65,9 +65,15 @@ rng = np.random.default_rng(0)
 k = 20
 rad = 50e3
 
-res_newsim = gsim.interpolate.sgs(xx, yy, res_cond, vario, rad, k, seed=0)
+rconds = [0.1, 0.01, 0.001, 0.0001]
 
-plt.pcolormesh(ds.x, ds.y, res_newsim+trend)
-plt.axis('scaled')
-plt.colorbar()
+fig, axs = plt.subplots(1, len(rconds), figsize=(12, 3), sharey=True)
+
+for rcond, ax in zip(rconds, axs):
+    sim = gsim.interpolate.sgs(xx, yy, res_cond, vario, rad, k, seed=0, rcond=rcond)
+
+    im = ax.pcolormesh(ds.x, ds.y, sim+trend, vmin=-1200, vmax=2700)
+    ax.axis('scaled')
+    ax.set_title(f'rcond: {rcond}')
+    plt.colorbar(im, ax=ax, pad=0.03, aspect=40)
 plt.show()

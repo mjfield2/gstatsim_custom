@@ -12,6 +12,8 @@ from scipy.stats import qmc
 from sklearn.preprocessing import QuantileTransformer
 from tqdm.auto import tqdm
 import multiprocessing as mp
+import psutil
+from netCDF4 import Dataset
 
 # plotting
 import matplotlib.pyplot as plt
@@ -101,11 +103,14 @@ def spline_interp_msk(points, values, xx, yy, mask, damping):
 
 if __name__ == '__main__':
 
+    csv_path = Path('../continent_variogram_params_500.csv')
+    nc_path = Path('../continental_variogram_500.nc')
+
     tic = time.time()
 
     rng = np.random.default_rng(0)
 
-    ds = xr.open_dataset(Path('../../bedmap/bedmap3_mod_1km.nc'))
+    ds = xr.open_dataset(Path('../../bedmap/bedmap3_mod_500m.nc'))
 
     # add exposed bedrock to conditioning data
     thick_cond = np.where(ds.mask == 4, 0, ds.thick_cond.values)
@@ -180,7 +185,8 @@ if __name__ == '__main__':
         params.append([p[0], p[1], coordinates, norm_values, rng, azim, maxlag, dist_change, n_samples, n_lags, directional])
 
     # run in parallel
-    with mp.Pool(7) as p:
+    n_cores = psutil.cpu_count(logical=False)-1
+    with mp.Pool(n_cores) as p:
         result = p.starmap(local_variogram, params)
 
     # # run serially
@@ -211,7 +217,7 @@ if __name__ == '__main__':
     df.loc[df.smooth < 0.5, 'smooth'] = 0.5
     df.loc[df.smooth > smooth_max, 'smooth'] = smooth_max
     
-    df.to_csv(Path('../continent_variogram_params.csv'), index=False)
+    df.to_csv(csv_path, index=False)
 
     print('interpolating variogram parameters')
     points = np.array([df.x.values, df.y.values]).T
@@ -225,7 +231,7 @@ if __name__ == '__main__':
     interp_azim = np.where(interp_azim > 180, 180, interp_azim)
     
     interp_ranges = spline_interp_msk(points, df.range.values, xx, yy, ice_rock_msk, damping)
-    interp_ranges = np.where(interp_ranges < 0, np.mean(interp_ranges), interp_ranges)
+    interp_ranges = np.where(interp_ranges < 5e3, 5e3, interp_ranges)
     interp_ranges = np.where(interp_ranges > maxlag, maxlag, interp_ranges)
     
     interp_sills = spline_interp_msk(points, df.sill.values, xx, yy, ice_rock_msk, damping)
@@ -235,11 +241,11 @@ if __name__ == '__main__':
     interp_smooths = np.where(interp_smooths > smooth_max, smooth_max, interp_smooths)
 
     interp_major_ranges = spline_interp_msk(points, df.major_range.values, xx, yy, ice_rock_msk, damping)
-    interp_major_ranges = np.where(interp_major_ranges < 0, np.mean(interp_major_ranges), interp_major_ranges)
+    interp_major_ranges = np.where(interp_major_ranges < 5e3, 5e3, interp_major_ranges)
     interp_major_ranges = np.where(interp_major_ranges > maxlag, maxlag, interp_major_ranges)
     
     interp_minor_ranges = spline_interp_msk(points, df.minor_range.values, xx, yy, ice_rock_msk, damping)
-    interp_minor_ranges = np.where(interp_minor_ranges < 0, np.mean(interp_minor_ranges), interp_minor_ranges)
+    interp_minor_ranges = np.where(interp_minor_ranges < 5e3, 5e3, interp_minor_ranges)
     interp_minor_ranges = np.where(interp_minor_ranges > maxlag, maxlag, interp_minor_ranges)
 
     dsv = xr.Dataset(
@@ -258,7 +264,7 @@ if __name__ == '__main__':
         )
     )
 
-    dsv.to_netcdf(Path('../continental_variogram.nc'))
+    dsv.to_netcdf(nc_path)
 
     toc = time.time()
     print(f'{toc-tic:.3f} seconds')
@@ -275,7 +281,7 @@ if __name__ == '__main__':
         ax.axis('scaled')
         ax.set_title(title)
         plt.colorbar(im, ax=ax, pad=0.03, aspect=40)
-    plt.savefig(Path('../figures/continent_variogram.png'), dpi=300, bbox_inches='tight')
+    plt.savefig(Path('../figures/continent_variogram_500.png'), dpi=300, bbox_inches='tight')
     plt.show()
 
     
