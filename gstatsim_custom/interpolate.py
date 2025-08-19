@@ -7,6 +7,7 @@ import multiprocessing as mp
 from ._krige import *
 from .utilities import *
 from .neighbors import *
+from .covariance import *
 
 def krige(xx, yy, grid, variogram, radius=100e3, num_points=20, ktype='ok', sim_mask=None, quiet=False, stencil=None):
     """
@@ -31,7 +32,7 @@ def krige(xx, yy, grid, variogram, radius=100e3, num_points=20, ktype='ok', sim_
     """
     
     # check arguments
-    _sanity_checks(xx, yy, grid, variogram, radius, num_points, ktype)
+    _sanity_checks(xx, yy, grid, variogram, radius, num_points, ktype, sim_mask)
 
     # preprocess some grids and variogram parameters
     out_grid, nst_trans, cond_msk, inds, vario, global_mean, stencil = _preprocess(xx, yy, grid, variogram, sim_mask, radius, stencil)
@@ -87,7 +88,7 @@ def krige(xx, yy, grid, variogram, radius=100e3, num_points=20, ktype='ok', sim_
     return sim_trans, std_trans
 
 
-def sgs(xx, yy, grid, variogram, radius=100e3, num_points=20, ktype='ok', sim_mask=None, quiet=False, stencil=None, seed=None):
+def sgs(xx, yy, grid, variogram, radius=100e3, num_points=20, ktype='ok', sim_mask=None, quiet=False, stencil=None, rcond=None, seed=None):
     """
     Sequential Gaussian Simulation with ordinary or simple kriging using nearest neighbors found in an octant search.
 
@@ -112,7 +113,7 @@ def sgs(xx, yy, grid, variogram, radius=100e3, num_points=20, ktype='ok', sim_ma
     """
     
     # check arguments
-    _sanity_checks(xx, yy, grid, variogram, radius, num_points, ktype)
+    _sanity_checks(xx, yy, grid, variogram, radius, num_points, ktype, sim_mask)
 
     # preprocess some grids and variogram parameters
     out_grid, nst_trans, cond_msk, inds, vario, global_mean, stencil = _preprocess(xx, yy, grid, variogram, sim_mask, radius, stencil)
@@ -155,9 +156,9 @@ def sgs(xx, yy, grid, variogram, radius=100e3, num_points=20, ktype='ok', sim_ma
 
             # solve kriging equations
             if ktype=='ok':
-                est, var = ok_solve((xx[i,j], yy[i,j]), nearest, local_vario)
+                est, var = ok_solve((xx[i,j], yy[i,j]), nearest, local_vario, rcond)
             elif ktype=='sk':
-                est, var = sk_solve((xx[i,j], yy[i,j]), nearest, local_vario, global_mean)
+                est, var = sk_solve((xx[i,j], yy[i,j]), nearest, local_vario, global_mean, rcond)
 
             var = np.abs(var)
 
@@ -214,7 +215,7 @@ def _preprocess(xx, yy, grid, variogram, sim_mask, radius, stencil):
 
     return out_grid, nst_trans, cond_msk, inds, vario, global_mean, stencil
 
-def _sanity_checks(xx, yy, grid, vario, radius, num_points, ktype):
+def _sanity_checks(xx, yy, grid, vario, radius, num_points, ktype, sim_mask):
     """
     Do sanity checks and throw errors.
 
@@ -230,13 +231,27 @@ def _sanity_checks(xx, yy, grid, vario, radius, num_points, ktype):
     Returns:
         Nothing
     """
-    
-    if (isinstance(xx, np.ndarray) == False) | (len(xx.shape) != 2):
+
+    if isinstance(xx, np.ndarray):
+        if (len(xx.shape) != 2):
+            raise ValueError('xx must be a 2D NumPy array')
+    else:
         raise ValueError('xx must be a 2D NumPy array')
-    if (isinstance(yy, np.ndarray) == False) | (len(yy.shape) != 2):
-        raise ValueError('yy must be a 2D array')
-    if (isinstance(grid, np.ndarray) == False) | (len(grid.shape) != 2):
-        raise ValueError('grid must be a 2D array')
+        
+    if isinstance(yy, np.ndarray):
+        if (len(yy.shape) != 2):
+            raise ValueError('yy must be a 2D NumPy array')
+    else:
+        raise ValueError('yy must be a 2D NumPy array')
+
+    if isinstance(grid, np.ndarray):
+        if (len(grid.shape) != 2):
+            raise ValueError('grid must be a 2D NumPy array')
+    else:
+        raise ValueError('grid must be a 2D NumPy array')
+
+    if (xx.shape != yy.shape) | (xx.shape != grid.shape):
+        raise ValueError('xx, yy, and grid must have same shape')
 
     expected_keys = [
         'major_range',
@@ -254,12 +269,35 @@ def _sanity_checks(xx, yy, grid, vario, radius, num_points, ktype):
     if len(missing_vario) > 0:
         raise ValueError(f"Variogram missing {', '.join(missing_vario)}")
 
-    if vario['vtype'].lower() not in ['gaussian', 'exponential', 'spherical', 'matern']:
+    if vario['vtype'].lower() not in covmodels.keys():
         raise ValueError(f"vtype must be exponential, gaussian, spherical, or matern")
 
     if vario['vtype'].lower() == 'matern':
         if 's' not in vario.keys():
             raise ValueError(f"Matern covariance requires the s parameter in the variogram")
+
+    if sim_mask is not None:
+        if isinstance(sim_mask, np.ndarray):
+            if sim_mask.shape != grid.shape:
+                raise ValueError('sim_mask shape must be same as grid if provided')
+        else:
+            raise ValueError('sim_mask must be None or a 2D array')
+
+    for k in vario.keys():
+        if k == 'vtype':
+            continue
+        else:
+            if isinstance(vario[k], numbers.Number):
+                if np.isnan(vario[k]) == True:
+                    raise ValueError(f'variogram parameter {k} is NaN')
+            elif isinstance(vario[k], np.ndarray):
+                if sim_mask is None:
+                    if np.count_nonzero(np.isnan(vario[k])) > 0:
+                        raise ValueError(f'Variogram parameter {k} contains NaN')
+                else:
+                    if np.count_nonzero((sim_mask==True) & (np.isnan(vario[k]))) > 0:
+                        raise ValueError(f'Variogram parameter {k} contains NaN in sim_mask')
+                
 
     if isinstance(radius, numbers.Number) == False:
         raise ValueError('radius must be a number')

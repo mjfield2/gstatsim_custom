@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.metrics import pairwise_distances
 from .covariance import *
 
-def ok_solve(sim_xy, nearest, vario, precompute=False):
+def ok_solve(sim_xy, nearest, vario, rcond=None, precompute=False):
     """
     Solve ordinary kriging system given neighboring points
     
@@ -34,7 +34,7 @@ def ok_solve(sim_xy, nearest, vario, precompute=False):
     rho[n] = 1 
 
     # solve for kriging weights
-    k_weights = np.linalg.inv(Sigma)@rho
+    k_weights, res, rank, s = np.linalg.lstsq(Sigma, rho, rcond=rcond) 
     var = vario['sill'] - np.sum(k_weights[0:n]*rho[0:n])
 
     if precompute == True:
@@ -43,7 +43,7 @@ def ok_solve(sim_xy, nearest, vario, precompute=False):
         est = local_mean + np.sum(k_weights[0:n]*(nearest[:,2] - local_mean))
         return est, var
 
-def sk_solve(sim_xy, nearest, vario, global_mean, precompute=False):
+def sk_solve(sim_xy, nearest, vario, global_mean, rcond=None, precompute=False):
     """
     Solve simple kriging system given neighboring points
     
@@ -69,8 +69,9 @@ def sk_solve(sim_xy, nearest, vario, global_mean, precompute=False):
 
     # covariance between data and unknown
     rho = make_rho(xy_val, np.tile([sim_xy[0], sim_xy[1]], n), rotation_matrix, vario)
-    
-    k_weights = np.linalg.inv(Sigma)@rho
+
+    # solve for kriging weights
+    k_weights, res, rank, s = np.linalg.lstsq(Sigma, rho, rcond=rcond) 
     var = vario['sill'] - np.sum(k_weights*rho)
 
     if precompute == True:

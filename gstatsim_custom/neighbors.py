@@ -59,6 +59,7 @@ def neighbors(i, j, ii, jj, xx, yy, grid, cond_msk, radius, num_points, stencil=
         p = p[:num_points//8,:]
         points.append(p)
     points = np.concatenate(points)
+    points = points[~np.isnan(points[:,2]),:]
     
     return points
 
