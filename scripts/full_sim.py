@@ -1,15 +1,7 @@
 # general
 import numpy as np
 from numpy.random import PCG64, SeedSequence
-import pandas as pd
-import verde as vd
 import xarray as xr
-import skgstat as skg
-from skgstat import models
-import gstatsim as gsm
-from scipy.interpolate import RBFInterpolator
-from scipy.stats import qmc
-from sklearn.preprocessing import QuantileTransformer
 from tqdm.auto import tqdm
 from cmcrameri import cm
 
@@ -31,7 +23,7 @@ import gstatsim_custom as gsim
 
 if __name__=='__main__':
 
-    ds = xr.open_dataset(Path('../../bedmap/bedmap3_mod_500m.nc'))
+    ds = xr.open_dataset(Path('../processed_data/bedmap3_mod_1000.nc'))
 
     # add exposed bedrock to conditioning data
     thick_cond = np.where(ds.mask.values == 4, 0, ds.thick_cond.values)
@@ -52,7 +44,7 @@ if __name__=='__main__':
 
     res_norm, nst_trans = gsim.utilities.gaussian_transformation(res_cond, cond_msk)
 
-    dsv = xr.load_dataset(Path('../continental_variogram_500.nc'))
+    dsv = xr.load_dataset(Path('../processed_data/continental_variogram_1000.nc'))
     
     vario = {
         'azimuth' : dsv.azimuth.values,
@@ -68,21 +60,22 @@ if __name__=='__main__':
     k = 24
     rad = 50e3
 
-    # temporoary sim mask
-    # ilow = 2100
-    # ihigh = 2800
-    # jlow = 3000
-    # jhigh = 3700
-    # sim_mask = np.full(xx.shape, False)
-    # sim_mask[ilow:ihigh,jlow:jhigh] = True
+    # print('starting simulation')
+    # tic = time.time()
+    # sim = gsim.interpolate.sgs(xx, yy, res_cond, vario, rad, k, seed=rng, sim_mask=ice_rock_msk, rcond=1e-4)
+    # toc = time.time()
+    # print(f'{toc-tic} seconds')
+
+    # bound the bed to be below the surface
+    bounds = (-9999, ds.surface_topography.values - trend)
 
     print('starting simulation')
     tic = time.time()
-    sim = gsim.interpolate.sgs(xx, yy, res_cond, vario, rad, k, seed=rng, sim_mask=ice_rock_msk, rcond=1e-4)
+    sim = gsim.interpolate.sgs(xx, yy, res_cond, vario, rad, k, seed=rng, sim_mask=ice_rock_msk, rcond=1e-4, bounds=bounds)
     toc = time.time()
     print(f'{toc-tic} seconds')
 
-    np.save(Path('../results/nonstationary_sim_500m.npy'), sim)
+    np.save(Path('../results/nonstationary_sim_1000.npy'), sim)
 
     ilow = 1000
     ihigh = 5800
@@ -99,7 +92,7 @@ if __name__=='__main__':
     plt.axis('scaled')
     plt.xlabel('X [km]')
     plt.ylabel('Y [km]')
-    plt.title('SGS simulation+trend, exponential covariance')
+    plt.title('SGS simulation+trend, matern covariance, nonstationary, anisotropic')
     plt.colorbar(im, pad=0.03, aspect=40, shrink=0.7, label='bed elevation [meters]')
-    plt.savefig(Path('../figures/full_simulation_nonstationary_500m.png'), dpi=300, bbox_inches='tight')
+    plt.savefig(Path('../figures/full_simulation_nonstationary_1000.png'), dpi=300, bbox_inches='tight')
     plt.show()

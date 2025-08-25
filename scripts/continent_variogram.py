@@ -31,6 +31,7 @@ import sys
 sys.path.append('..')
 
 import gstatsim_custom as gsim
+from utilities import spline_interp_msk
 
 def local_variogram(xi, yi, coordinates, values, rng, azim, maxlag=100e3, dist_change=50e3, n_samples=500, n_lags=50, directional=False):
     # get cond data within distance of point
@@ -93,24 +94,16 @@ def local_variogram(xi, yi, coordinates, values, rng, azim, maxlag=100e3, dist_c
     
     return var, rang, sill, smooth, major_range, minor_range
 
-def spline_interp_msk(points, values, xx, yy, mask, damping):
-    sp = vd.Spline(damping=damping)
-    sp.fit((points[:,0], points[:,1]), values)
-    preds = sp.predict((xx[mask], yy[mask]))
-    grid = np.full(xx.shape, np.nan)
-    np.place(grid, mask, preds)
-    return grid
-
 if __name__ == '__main__':
 
-    csv_path = Path('../continent_variogram_params_500.csv')
-    nc_path = Path('../continental_variogram_500.nc')
+    csv_path = Path('../processed_data/continent_variogram_params_1000.csv')
+    nc_path = Path('../processed_data/continental_variogram_1000.nc')
 
     tic = time.time()
 
     rng = np.random.default_rng(0)
 
-    ds = xr.open_dataset(Path('../../bedmap/bedmap3_mod_500m.nc'))
+    ds = xr.open_dataset(Path('../processed_data/bedmap3_mod_1000.nc'))
 
     # add exposed bedrock to conditioning data
     thick_cond = np.where(ds.mask == 4, 0, ds.thick_cond.values)
@@ -211,7 +204,7 @@ if __name__ == '__main__':
     )
     df = df.dropna()
 
-    smooth_max = 1.5
+    smooth_max = 1
 
     # limit smoothness to range
     df.loc[df.smooth < 0.5, 'smooth'] = 0.5
@@ -281,7 +274,7 @@ if __name__ == '__main__':
         ax.axis('scaled')
         ax.set_title(title)
         plt.colorbar(im, ax=ax, pad=0.03, aspect=40)
-    plt.savefig(Path('../figures/continent_variogram_500.png'), dpi=300, bbox_inches='tight')
+    plt.savefig(Path('../figures/continent_variogram_1000.png'), dpi=300, bbox_inches='tight')
     plt.show()
 
     

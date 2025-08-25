@@ -1,6 +1,7 @@
 raw_data/
 results/
 **/results
+processed_data/
 ._*
 **/._*
 .ipynb_checkpoints/

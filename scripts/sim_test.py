@@ -28,7 +28,7 @@ sys.path.append('..')
 
 import gstatsim_custom as gsim
 
-ds = xr.load_dataset(Path('../test_data.nc'))
+ds = xr.load_dataset(Path('../processed_data/test_data.nc'))
 
 bed_cond = ds.surface_topography.values - ds.thick_cond.values
 xx, yy = np.meshgrid(ds.x, ds.y)
@@ -65,9 +65,11 @@ rng = np.random.default_rng(0)
 k = 20
 rad = 50e3
 
-res_newsim = gsim.interpolate.sgs(xx, yy, res_cond, vario, rad, k, seed=0)
+bounds = (-1000, 1000)
 
-plt.pcolormesh(ds.x, ds.y, res_newsim+trend)
+res_newsim = gsim.interpolate.sgs(xx, yy, res_cond, vario, rad, k, bounds=bounds, seed=0)
+
+plt.pcolormesh(ds.x, ds.y, res_newsim)
 plt.axis('scaled')
 plt.colorbar()
 plt.show()

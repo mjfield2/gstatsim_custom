@@ -3,6 +3,7 @@ from copy import deepcopy
 import numbers
 from tqdm import tqdm
 import multiprocessing as mp
+from scipy.stats import truncnorm
 
 from ._krige import *
 from .utilities import *
@@ -88,7 +89,7 @@ def krige(xx, yy, grid, variogram, radius=100e3, num_points=20, ktype='ok', sim_
     return sim_trans, std_trans
 
 
-def sgs(xx, yy, grid, variogram, radius=100e3, num_points=20, ktype='ok', sim_mask=None, quiet=False, stencil=None, rcond=None, seed=None):
+def sgs(xx, yy, grid, variogram, radius=100e3, num_points=20, ktype='ok', sim_mask=None, quiet=False, stencil=None, rcond=None, bounds=None, seed=None):
     """
     Sequential Gaussian Simulation with ordinary or simple kriging using nearest neighbors found in an octant search.
 
@@ -116,7 +117,7 @@ def sgs(xx, yy, grid, variogram, radius=100e3, num_points=20, ktype='ok', sim_ma
     _sanity_checks(xx, yy, grid, variogram, radius, num_points, ktype, sim_mask)
 
     # preprocess some grids and variogram parameters
-    out_grid, nst_trans, cond_msk, inds, vario, global_mean, stencil = _preprocess(xx, yy, grid, variogram, sim_mask, radius, stencil)
+    out_grid, nst_trans, cond_msk, inds, vario, global_mean, stencil, bounds = _preprocess(xx, yy, grid, variogram, sim_mask, radius, stencil, bounds)
 
     # make random number generator if not provided
     rng = get_random_generator(seed)
@@ -163,14 +164,24 @@ def sgs(xx, yy, grid, variogram, radius=100e3, num_points=20, ktype='ok', sim_ma
             var = np.abs(var)
 
             # put value in grid
-            out_grid[i,j] = rng.normal(est, np.sqrt(var), 1)
+            # out_grid[i,j] = rng.normal(est, np.sqrt(var), 1)
+            if bounds is None:
+                out_grid[i,j] = rng.normal(est, np.sqrt(var), 1)
+            else:
+                scale = np.sqrt(var)
+                a_transformed, b_transformed = (bounds[0][i,j] - est) / scale, (bounds[1][i,j] - est) / scale
+                out_grid[i,j] = truncnorm.rvs(a_transformed, b_transformed, loc=est, scale=scale, size=1, random_state=rng)
             cond_msk[i,j] = True
 
     sim_trans = nst_trans.inverse_transform(out_grid.reshape(-1,1)).squeeze().reshape(xx.shape)
 
     return sim_trans
 
-def _preprocess(xx, yy, grid, variogram, sim_mask, radius, stencil):
+def sample_bounded_value(bounds, loc, scale, rng):
+    a_transformed, b_transformed = (bounds[0][i,j] - loc) / scale, (bounds[1][i,j] - loc) / scale
+    return truncnorm.rvs(a_transformed, b_transformed, loc=loc, scale=scale, size=1, random_state=rng)
+
+def _preprocess(xx, yy, grid, variogram, sim_mask, radius, stencil, bounds):
     """
     Sequential Gaussian Simulation with ordinary or simple kriging using nearest neighbors found in an octant search.
 
@@ -213,7 +224,30 @@ def _preprocess(xx, yy, grid, variogram, sim_mask, radius, stencil):
     if stencil is None:
         stencil, _, _ = make_circle_stencil(xx[0,:], radius)
 
-    return out_grid, nst_trans, cond_msk, inds, vario, global_mean, stencil
+    # put bounds into grid if int
+    new_bounds = []
+    if bounds is not None:
+        try:
+            if len(bounds) != 2:
+                raise ValueError('bounds be an iterable of length 2 with lower and upper bounds')
+            else:
+                for i, bound in enumerate(bounds):
+                    if isinstance(bound, numbers.Number):
+                        trans_bound = nst_trans.transform(np.array([bound]).reshape(-1,1)).squeeze()
+                        new_bounds.append(np.full(xx.shape, trans_bound))
+                    elif isinstance(bound, np.ndarray):
+                        if bound.shape != xx.shape:
+                            raise ValueError('bounds must have same shape as grid')
+                        else:
+                            new_bounds.append(nst_trans.transform(bound.reshape(-1,1)).reshape(xx.shape))
+                    else:
+                        raise ValueError('bounds must be None or a 2D numpy array')
+        except:
+            raise ValueError('bounds must be None or a 2D numpy array')
+    else:
+        new_bounds = None
+
+    return out_grid, nst_trans, cond_msk, inds, vario, global_mean, stencil, new_bounds
 
 def _sanity_checks(xx, yy, grid, vario, radius, num_points, ktype, sim_mask):
     """
