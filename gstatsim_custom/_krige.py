@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.metrics import pairwise_distances
+from scipy.spatial.distance import cdist, pdist, squareform
 from .covariance import *
 
 def ok_solve(sim_xy, nearest, vario, rcond=None, precompute=False):
@@ -30,8 +30,8 @@ def ok_solve(sim_xy, nearest, vario, rcond=None, precompute=False):
 
     # Set up Right Hand Side (covariance between data and unknown)
     rho = np.zeros((n+1))
-    rho[0:n] = make_rho(xy_val, np.tile([sim_xy[0], sim_xy[1]], n), rotation_matrix, vario)
-    rho[n] = 1 
+    rho[0:n] = make_rho(xy_val, sim_xy, rotation_matrix, vario)
+    rho[n] = 1
 
     # solve for kriging weights
     k_weights, res, rank, s = np.linalg.lstsq(Sigma, rho, rcond=rcond) 
@@ -68,7 +68,7 @@ def sk_solve(sim_xy, nearest, vario, global_mean, rcond=None, precompute=False):
     Sigma = make_sigma(xy_val, rotation_matrix, vario)
 
     # covariance between data and unknown
-    rho = make_rho(xy_val, np.tile([sim_xy[0], sim_xy[1]], n), rotation_matrix, vario)
+    rho = make_rho(xy_val, sim_xy, rotation_matrix, vario)
 
     # solve for kriging weights
     k_weights, res, rank, s = np.linalg.lstsq(Sigma, rho, rcond=rcond) 
@@ -116,8 +116,7 @@ def make_sigma(coord, rotation_matrix, vario):
         numpy.ndarray: nxn matrix of covariance between n points
     """
     
-    mat = np.matmul(coord, rotation_matrix)
-    norm_range = pairwise_distances(mat,mat)
+    norm_range = squareform(pdist(coord @ rotation_matrix))
     Sigma = covmodels[vario['vtype'].lower()](norm_range, **vario)
 
     return Sigma
@@ -137,8 +136,8 @@ def make_rho(coord1, coord2, rotation_matrix, vario):
         numpy.ndarray: nx1 array of covariance between n points and grid cell of interest
     """
     
-    mat1 = np.matmul(coord1, rotation_matrix)
-    mat2 = np.matmul(coord2.reshape(-1,2), rotation_matrix) 
+    mat1 = coord1 @ rotation_matrix
+    mat2 = coord2 @ rotation_matrix
     norm_range = np.sqrt(np.square(mat1 - mat2).sum(axis=1))
     rho = covmodels[vario['vtype'].lower()](norm_range, **vario)
 
