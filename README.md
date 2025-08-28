@@ -1,3 +1,7 @@
+# Geostatistical interpolation of Antarctic bedrock topography
+
+The goal of this project is to interpolate radar-derived bed topography measurements across Antarctica. We use the data compiled by the Bedmap project.
+
 # Variation of GStatSim
 
 This is designed for geostatistical interpolation
